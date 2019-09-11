@@ -1,14 +1,66 @@
-# --------------------------------------------------------
-# Fast/er R-CNN
-# Licensed under The MIT License [see LICENSE for details]
-# Written by Bharath Hariharan
-# --------------------------------------------------------
-
+import os
+import cPickle
 import xml.etree.ElementTree as ET
-import os, sys
-# import cPickle
-import _pickle as cPickle
 import numpy as np
+
+
+devkit_path = '/home/zhaoxiandong/datasets/VOCdevkit'
+year = '2007'
+use_07_metric = True
+classes = ('__background__', # always index 0
+                         'aeroplane', 'bicycle', 'bird', 'boat',
+                         'bottle', 'bus', 'car', 'cat', 'chair',
+                         'cow', 'diningtable', 'dog', 'horse',
+                         'motorbike', 'person', 'pottedplant',
+                         'sheep', 'sofa', 'train', 'tvmonitor')
+_image_set = 'test'
+
+def _get_voc_results_file_template():
+    # VOCdevkit/results/VOC2007/Main/<comp_id>_det_test_aeroplane.txt
+    filename = 'comp4_det_test_{:s}.txt'
+    path = os.path.join(
+        './results/',
+        filename)
+    return path
+
+def _do_python_eval(output_dir = 'output_map'):
+    annopath = os.path.join(
+        devkit_path,
+        'VOC' + year,
+        'Annotations',
+        '{:s}.xml')
+    imagesetfile = os.path.join(
+        devkit_path,
+        'VOC' + year,
+        'ImageSets',
+        'Main',
+        _image_set + '.txt')
+    cachedir = os.path.join( './annotations_cache')
+    aps = []
+    # The PASCAL VOC metric changed in 2010
+    print 'VOC07 metric? ' + ('Yes' if use_07_metric else 'No')
+    if not os.path.isdir(output_dir):
+        os.mkdir(output_dir)
+    for i, cls in enumerate(classes):
+        if cls == '__background__':
+            continue
+        filename = _get_voc_results_file_template().format(cls)
+        rec, prec, ap = voc_eval(
+            filename, annopath, imagesetfile, cls, cachedir, ovthresh=0.5,
+            use_07_metric=use_07_metric)
+        aps += [ap]
+        print('AP for {} = {:.4f}'.format(cls, ap))
+        with open(os.path.join(output_dir, cls + '_pr.pkl'), 'w') as f:
+            cPickle.dump({'rec': rec, 'prec': prec, 'ap': ap}, f)
+    print('Mean AP = {:.4f}'.format(np.mean(aps)))
+    print('~~~~~~~~')
+    print('Results:')
+    for ap in aps:
+        print('{:.3f}'.format(ap))
+    print('{:.3f}'.format(np.mean(aps)))
+    print('~~~~~~~~')
+
+
 
 
 def parse_rec(filename):
@@ -29,7 +81,6 @@ def parse_rec(filename):
         objects.append(obj_struct)
 
     return objects
-
 
 def voc_ap(rec, prec, use_07_metric=False):
     """ ap = voc_ap(rec, prec, [use_07_metric])
@@ -63,7 +114,6 @@ def voc_ap(rec, prec, use_07_metric=False):
         # and sum (\Delta recall) * prec
         ap = np.sum((mrec[i + 1] - mrec[i]) * mpre[i + 1])
     return ap
-
 
 def voc_eval(detpath,
              annopath,
@@ -112,10 +162,10 @@ def voc_eval(detpath,
         for i, imagename in enumerate(imagenames):
             recs[imagename] = parse_rec(annopath.format(imagename))
             if i % 100 == 0:
-                print('Reading annotation for {:d}/{:d}'.format(
-                    i + 1, len(imagenames)))
+                print 'Reading annotation for {:d}/{:d}'.format(
+                    i + 1, len(imagenames))
         # save
-        print('Saving cached annotations to {:s}'.format(cachefile))
+        print 'Saving cached annotations to {:s}'.format(cachefile)
         with open(cachefile, 'w') as f:
             cPickle.dump(recs, f)
     else:
@@ -203,65 +253,5 @@ def voc_eval(detpath,
 
     return rec, prec, ap
 
-
-def _do_python_eval(res_prefix, output_dir='output'):
-    _devkit_path = '/home/zhaoxiandong/datasets/VOCdevkit'
-    _year = '2007'
-    _classes = ('__background__',  # always index 0
-                'aeroplane', 'bicycle', 'bird', 'boat',
-                'bottle', 'bus', 'car', 'cat', 'chair',
-                'cow', 'diningtable', 'dog', 'horse',
-                'motorbike', 'person', 'pottedplant',
-                'sheep', 'sofa', 'train', 'tvmonitor')
-
-    # filename = '/data/hongji/darknet/results/comp4_det_test_{:s}.txt'
-    filename = res_prefix + '{:s}.txt'
-    annopath = os.path.join(
-        _devkit_path,
-        'VOC' + _year,
-        'Annotations',
-        '{:s}.xml')
-    imagesetfile = os.path.join(
-        _devkit_path,
-        'VOC' + _year,
-        'ImageSets',
-        'Main',
-        'test.txt')
-    cachedir = os.path.join(_devkit_path, 'annotations_cache')
-    aps = []
-    # The PASCAL VOC metric changed in 2010
-    use_07_metric = True if int(_year) < 2010 else False
-    print('VOC07 metric? ' + ('Yes' if use_07_metric else 'No'))
-    if not os.path.isdir(output_dir):
-        os.mkdir(output_dir)
-    for i, cls in enumerate(_classes):
-        if cls == '__background__':
-            continue
-
-        rec, prec, ap = voc_eval(
-            filename, annopath, imagesetfile, cls, cachedir, ovthresh=0.5,
-            use_07_metric=use_07_metric)
-        aps += [ap]
-        print('AP for {} = {:.4f}'.format(cls, ap))
-        with open(os.path.join(output_dir, cls + '_pr.pkl'), 'w') as f:
-            cPickle.dump({'rec': rec, 'prec': prec, 'ap': ap}, f)
-    print('Mean AP = {:.4f}'.format(np.mean(aps)))
-    print('~~~~~~~~')
-    print('Results:')
-    for ap in aps:
-        print('{:.3f}'.format(ap))
-    print('{:.3f}'.format(np.mean(aps)))
-    print('~~~~~~~~')
-    print('')
-    print('--------------------------------------------------------------')
-    print('Results computed with the **unofficial** Python eval code.')
-    print('Results should be very close to the official MATLAB eval code.')
-    print('Recompute with `./tools/reval.py --matlab ...` for your paper.')
-    print('-- Thanks, The Management')
-    print('--------------------------------------------------------------')
-
-
-if __name__ == '__main__':
-    # res_prefix = '/data/hongji/darknet/project/voc/results/comp4_det_test_'
-    res_prefix = sys.argv[1]
-    _do_python_eval(res_prefix, output_dir='output')
+if __name__ == "__main__":
+    _do_python_eval()
